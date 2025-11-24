@@ -141,7 +141,9 @@ async def _process_component_and_get_gocq_part(
             gocq_parts.append({"type": "text", "data": {"text": "[图片转发失败]"}})
     elif comp_type_name == 'Video':
         cached_video_path_str = getattr(comp, 'file', None)
-        if cached_video_path_str and Path(cached_video_path_str).exists():
+        if cached_video_path_str and cached_video_path_str.startswith('[视频过大未缓存:'):
+            gocq_parts.append({"type": "text", "data": {"text": cached_video_path_str}})
+        elif cached_video_path_str and Path(cached_video_path_str).exists():
             absolute_path = str(Path(cached_video_path_str).absolute())
             logger.info(f"[AntiRevoke] 准备发送已缓存的视频，路径: {absolute_path}")
             gocq_parts.append({"type": "video", "data": {"file": f"file:///{absolute_path}"}})
@@ -154,6 +156,9 @@ async def _process_component_and_get_gocq_part(
         
         original_filename = None
         if cached_file_path_str:
+            if cached_file_path_str.startswith('[文件过大未缓存:'):
+                gocq_parts.append({"type": "text", "data": {"text": cached_file_path_str}})
+                return gocq_parts
             try:
                 original_filename = Path(cached_file_path_str).name.split('_', 1)[1]
             except IndexError:
@@ -180,7 +185,7 @@ async def _process_component_and_get_gocq_part(
     return gocq_parts
 
 @register(
-    "astrbot_plugin_anti_revoke", "Foolllll", "监控撤回插件", "0.2",
+    "astrbot_plugin_anti_revoke", "Foolllll", "监控撤回插件", "0.3",
     "https://github.com/Foolllll-J/astrbot_plugin_anti_revoke",
 )
 class AntiRevoke(Star):
@@ -191,6 +196,7 @@ class AntiRevoke(Star):
         self.ignore_senders = [str(s) for s in config.get("ignore_senders", []) or []]
         self.instance_id = "AntiRevoke"
         self.cache_expiration_time = int(config.get("cache_expiration_time", 300))
+        self.file_size_threshold_mb = int(config.get("file_size_threshold_mb", 300))
         self.context = context
         self.temp_path = Path(StarTools.get_data_dir("astrbot_plugin_anti_revoke"))
         self.temp_path.mkdir(exist_ok=True)
@@ -249,14 +255,32 @@ class AntiRevoke(Star):
             if not components: return None
 
             raw_file_names = []
+            raw_file_sizes = {}
+            raw_video_sizes = {}
             try:
                 raw_message = event.message_obj.raw_message
                 message_list = raw_message.get("message", [])
                 for segment in message_list:
                     if segment.get("type") == "file":
                         file_name = segment.get("data", {}).get("file")
+                        file_size = segment.get("data", {}).get("file_size")
+                        logger.info(f"[AntiRevoke] 解析到文件组件，名称: {file_name}, 大小: {file_size}")
                         if file_name:
                             raw_file_names.append(file_name)
+                        if file_size:
+                            try:
+                                raw_file_sizes[file_name] = int(file_size) if isinstance(file_size, str) else file_size
+                            except ValueError:
+                                logger.warning(f"[AntiRevoke] 无法解析文件大小: {file_size}")
+                    elif segment.get("type") == "video":
+                        file_id = segment.get("data", {}).get("file")
+                        file_size = segment.get("data", {}).get("file_size")
+                        if file_id and file_size:
+                            try:
+                                raw_video_sizes[file_id] = int(file_size) if isinstance(file_size, str) else file_size
+                                logger.info(f"[AntiRevoke] 解析到视频组件，ID: {file_id}, 大小: {file_size}")
+                            except ValueError:
+                                logger.warning(f"[AntiRevoke] 无法解析视频大小: {file_size}")
             except Exception as e:
                 logger.warning(f"[AntiRevoke] 解析 raw_message 失败: {e}")
             
@@ -271,12 +295,33 @@ class AntiRevoke(Star):
                     if comp_type_name == 'Video':
                         file_id = getattr(comp, 'file', None)
                         if not file_id: continue
+                        
+                        video_size = raw_video_sizes.get(file_id)
+                        if video_size and self.file_size_threshold_mb > 0:
+                            video_size_mb = video_size / (1024 * 1024)
+                            if video_size_mb > self.file_size_threshold_mb:
+                                logger.info(f"[{self.instance_id}] 视频大小 ({video_size_mb:.2f} MB) 超过阈值 ({self.file_size_threshold_mb} MB)，跳过缓存。")
+                                setattr(comp, 'file', f"[视频过大未缓存: {video_size_mb:.2f} MB]")
+                                continue
+                        
                         try:
                             ret = await client.api.call_action('get_file', **{"file_id": file_id})
                             download_url = ret.get('url')
                             if not download_url:
                                 setattr(comp, 'file', "Error: API did not return a URL.")
                                 continue
+                            
+                            file_size_from_api = ret.get('file_size')
+                            if file_size_from_api and self.file_size_threshold_mb > 0:
+                                try:
+                                    file_size_int = int(file_size_from_api) if isinstance(file_size_from_api, str) else file_size_from_api
+                                    api_size_mb = file_size_int / (1024 * 1024)
+                                    if api_size_mb > self.file_size_threshold_mb:
+                                        logger.info(f"[{self.instance_id}] 视频大小 ({api_size_mb:.2f} MB) 超过阈值 ({self.file_size_threshold_mb} MB)，跳过缓存。")
+                                        setattr(comp, 'file', f"[视频过大未缓存: {api_size_mb:.2f} MB]")
+                                        continue
+                                except (ValueError, TypeError) as e:
+                                    logger.warning(f"[{self.instance_id}] 无法解析API返回的文件大小: {file_size_from_api}")
                             
                             original_filename = getattr(comp, 'name', file_id.split('/')[-1])
                             if not original_filename or len(original_filename) < 5:
@@ -294,13 +339,28 @@ class AntiRevoke(Star):
 
                     elif comp_type_name == 'File':
                         try:
+                            original_filename = None
+                            if raw_file_names:
+                                original_filename = raw_file_names[0]
+                            
+                            file_size = raw_file_sizes.get(original_filename) if original_filename else None
+                            if file_size and self.file_size_threshold_mb > 0:
+                                file_size_mb = file_size / (1024 * 1024)
+                                if file_size_mb > self.file_size_threshold_mb:
+                                    logger.info(f"[{self.instance_id}] 文件 '{original_filename}' 大小 ({file_size_mb:.2f} MB) 超过阈值 ({self.file_size_threshold_mb} MB)，跳过缓存。")
+                                    unique_key = getattr(comp, 'url', None)
+                                    if unique_key:
+                                        local_file_map[unique_key] = f"[文件过大未缓存: {file_size_mb:.2f} MB, 文件名: {original_filename}]"
+                                    if raw_file_names:
+                                        raw_file_names.pop(0)
+                                    continue
+                            
                             temp_file_path = await comp.get_file()
                             if not temp_file_path or not os.path.exists(temp_file_path):
                                 logger.error(f"[{self.instance_id}] [File处理] ❌ 框架未能提供有效的临时文件路径。")
                                 continue
 
-                            original_filename = None
-                            if raw_file_names:
+                            if not original_filename and raw_file_names:
                                 original_filename = raw_file_names.pop(0)
                             
                             if not original_filename:

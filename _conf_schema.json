@@ -15,5 +15,10 @@
       "type": "int",
       "default": 300,
       "description": "消息缓存时间，单位: 秒 (默认5分钟)"
+    },
+    "file_size_threshold_mb": {
+      "type": "int",
+      "default": 300,
+      "description": "视频和文件大小阈值，单位: MB。超过此大小的视频和文件将不会被缓存 (设为0表示不限制)"
     }
 }
