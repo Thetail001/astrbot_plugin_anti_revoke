@@ -269,6 +269,7 @@ class AntiRevoke(Star):
     @filter.platform_adapter_type(PlatformAdapterType.AIOCQHTTP)
     @filter.event_message_type(filter.EventMessageType.ALL, priority=20)
     async def handle_message_cache(self, event: AstrMessageEvent):
+        """处理消息缓存，包括合并转发消息的中转"""
         group_id = str(event.get_group_id())
         message_id = str(event.message_obj.message_id)
         if event.get_message_type() != MessageType.GROUP_MESSAGE or group_id not in self.monitor_groups:
@@ -277,8 +278,15 @@ class AntiRevoke(Star):
         relay_info = None
         try:
             raw_message = event.message_obj.raw_message
+            if not isinstance(raw_message, dict):
+                raw_message = {}
             message_list = raw_message.get("message", [])
-            is_forward = (message_list and len(message_list) > 0 and message_list[0].get("type") == "forward")
+            
+            is_forward = False
+            if isinstance(message_list, list) and len(message_list) > 0:
+                first_segment = message_list[0]
+                if isinstance(first_segment, dict) and first_segment.get("type") == "forward":
+                    is_forward = True
             
             if is_forward and self.forward_relay_group:
                 logger.info(f"[{self.instance_id}] 检测到合并转发消息，准备转发到中转群 {self.forward_relay_group}，原消息ID: {message_id}")
@@ -406,26 +414,31 @@ class AntiRevoke(Star):
             raw_file_sizes = {}
             raw_video_sizes = {}
             try:
+                if not isinstance(raw_message, dict):
+                    raw_message = {}
                 message_list = raw_message.get("message", [])
-                for segment in message_list:
-                    if segment.get("type") == "file":
-                        file_name = segment.get("data", {}).get("file")
-                        file_size = segment.get("data", {}).get("file_size")
-                        if file_name:
-                            raw_file_names.append(file_name)
-                        if file_size:
-                            try:
-                                raw_file_sizes[file_name] = int(file_size) if isinstance(file_size, str) else file_size
-                            except ValueError:
-                                logger.warning(f"[AntiRevoke] 无法解析文件大小: {file_size}")
-                    elif segment.get("type") == "video":
-                        file_id = segment.get("data", {}).get("file")
-                        file_size = segment.get("data", {}).get("file_size")
-                        if file_id and file_size:
-                            try:
-                                raw_video_sizes[file_id] = int(file_size) if isinstance(file_size, str) else file_size
-                            except ValueError:
-                                logger.warning(f"[AntiRevoke] 无法解析视频大小: {file_size}")
+                if isinstance(message_list, list):
+                    for segment in message_list:
+                        if not isinstance(segment, dict):
+                            continue
+                        if segment.get("type") == "file":
+                            file_name = segment.get("data", {}).get("file")
+                            file_size = segment.get("data", {}).get("file_size")
+                            if file_name:
+                                raw_file_names.append(file_name)
+                            if file_size:
+                                try:
+                                    raw_file_sizes[file_name] = int(file_size) if isinstance(file_size, str) else file_size
+                                except ValueError:
+                                    logger.warning(f"[AntiRevoke] 无法解析文件大小: {file_size}")
+                        elif segment.get("type") == "video":
+                            file_id = segment.get("data", {}).get("file")
+                            file_size = segment.get("data", {}).get("file_size")
+                            if file_id and file_size:
+                                try:
+                                    raw_video_sizes[file_id] = int(file_size) if isinstance(file_size, str) else file_size
+                                except ValueError:
+                                    logger.warning(f"[AntiRevoke] 无法解析视频大小: {file_size}")
             except Exception as e:
                 logger.warning(f"[AntiRevoke] 解析 raw_message 失败: {e}")
             
@@ -577,6 +590,7 @@ class AntiRevoke(Star):
     @filter.platform_adapter_type(PlatformAdapterType.AIOCQHTTP)
     @filter.event_message_type(filter.EventMessageType.ALL, priority=10)
     async def handle_recall_event(self, event: AstrMessageEvent):
+        """处理群聊撤回事件"""
         raw_message = event.message_obj.raw_message
         post_type = get_value(raw_message, "post_type")
         if post_type == "notice" and get_value(raw_message, "notice_type") == "group_recall":
