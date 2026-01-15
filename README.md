@@ -1,13 +1,20 @@
-**<div align="center">**    <h2>👀 BIG BROTHER IS WATCHING YOU!</h2> </div>
+<div align="center">
 
-# 🛡️ QQ防撤回插件
+# 🛡️ QQ 防撤回插件
 
+<i>👀 BIG BROTHER IS WATCHING YOU!</i>
 
 ![License](https://img.shields.io/badge/license-AGPL--3.0-green?style=flat-square)
 ![Python](https://img.shields.io/badge/python-3.10+-blue?style=flat-square&logo=python&logoColor=white)
 ![AstrBot](https://img.shields.io/badge/framework-AstrBot-ff6b6b?style=flat-square)
 
-一款为 [**AstrBot**]([AstrBot](https://github.com/AstrBotDevs/AstrBot)) 设计的高可靠性防撤回插件。
+</div>
+
+## ✨ 简介
+
+一款为 [**AstrBot**](https://github.com/AstrBotDevs/AstrBot) 设计的高可靠性 QQ 防撤回插件，支持对多种消息类型的监控与恢复，包括文字、图片、语音、视频、文件、合并转发以及小程序等。
+
+---
 
 ## 📖 使用说明
 
@@ -16,6 +23,8 @@
 | **支持平台** | 仅支持 **`napcat`** 平台。                                                                                             |
 | **监控范围** | 仅支持 **群聊** 消息的撤回监控。                                                                                      |
 | **消息类型** | 支持所有聊天场景的消息类型。 |
+
+---
 
 ## ⚙️ 配置说明
 
@@ -30,6 +39,8 @@
 | **`forward_to_self`** | `bool` | `false` | 是否转发合并转发消息给机器人自身。开启后，收到的合并转发消息会自动转发给机器人自身私聊。 |
 | **`forward_relay_group`** | `str` | `""` | 中转群号，用于转发合并消息起到缓存作用。 |
 | **`auto_recall_relay`** | `bool` | `True` | 是否自动撤回中转群的消息。 |
+
+---
 
 ## ⚠️ 注意事项
 
@@ -82,8 +93,15 @@
 
 ---
 
-## ❤️支持
+## ❤️ 支持
 
 * [AstrBot 帮助文档](https://astrbot.app)
 * 如果您在使用中遇到问题，欢迎在本仓库提交 [Issue](https://github.com/Foolllll-J/astrbot_plugin_anti_revoke/issues)。
 
+---
+
+<div align="center">
+
+**如果本插件对你有帮助，欢迎点个 ⭐ Star 支持一下！**
+
+</div>
