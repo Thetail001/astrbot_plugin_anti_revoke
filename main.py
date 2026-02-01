@@ -138,7 +138,7 @@ async def _process_component_and_get_gocq_part(
         local_path = await _download_and_cache_image(session, comp, temp_path)
         if local_path:
             local_files_to_cleanup.append(local_path)
-            gocq_parts.append({"type": "image", "data": {"file": local_path}})
+            gocq_parts.append({"type": "image", "data": {"file": f"file:///{local_path}"}})
         else:
             gocq_parts.append({"type": "text", "data": {"text": "[图片转发失败]"}})
     elif comp_type_name == 'Video':
